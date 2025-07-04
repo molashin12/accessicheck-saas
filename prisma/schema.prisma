@@ -1,0 +1,203 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Subscription info
+  stripeCustomerId       String?   @unique
+  stripeSubscriptionId   String?   @unique
+  stripePriceId          String?
+  stripeCurrentPeriodEnd DateTime?
+  plan                   Plan      @default(FREE)
+  scanCredits            Int       @default(1)
+
+  accounts Account[]
+  sessions Session[]
+  scans    Scan[]
+  websites Website[]
+
+  @@map("users")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Website {
+  id          String   @id @default(cuid())
+  url         String
+  name        String?
+  description String?
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scans Scan[]
+
+  @@unique([url, userId])
+}
+
+model Scan {
+  id          String     @id @default(cuid())
+  websiteId   String
+  userId      String
+  url         String
+  status      ScanStatus @default(PENDING)
+  progress    Int        @default(0)
+  startedAt   DateTime   @default(now())
+  completedAt DateTime?
+  errorMessage String?
+
+  // Results
+  totalIssues    Int @default(0)
+  criticalIssues Int @default(0)
+  warningIssues  Int @default(0)
+  infoIssues     Int @default(0)
+  passedChecks   Int @default(0)
+  complianceScore Float @default(0)
+
+  // AI Insights
+  aiSummary       String?
+  aiRecommendations String?
+  estimatedFixTime  Int? // in hours
+
+  website Website      @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  issues  ScanIssue[]
+  reports ScanReport[]
+}
+
+model ScanIssue {
+  id          String      @id @default(cuid())
+  scanId      String
+  type        IssueType
+  severity    IssueSeverity
+  wcagLevel   WcagLevel
+  wcagCriterion String
+  element     String?
+  selector    String?
+  message     String
+  description String?
+  howToFix    String?
+  codeExample String?
+  pageUrl     String
+  createdAt   DateTime    @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model ScanReport {
+  id        String     @id @default(cuid())
+  scanId    String
+  format    ReportFormat
+  content   String     @db.Text
+  fileName  String
+  fileSize  Int
+  createdAt DateTime   @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+enum Plan {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum ScanStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum IssueType {
+  MISSING_ALT_TEXT
+  LOW_CONTRAST
+  MISSING_LABELS
+  KEYBOARD_NAVIGATION
+  FOCUS_MANAGEMENT
+  HEADING_STRUCTURE
+  LINK_PURPOSE
+  FORM_VALIDATION
+  ARIA_ATTRIBUTES
+  COLOR_ONLY_INFO
+  AUDIO_VIDEO
+  TIMING
+  SEIZURES
+  NAVIGATION
+  READABLE
+  PREDICTABLE
+  INPUT_ASSISTANCE
+  COMPATIBLE
+  OTHER
+}
+
+enum IssueSeverity {
+  CRITICAL
+  WARNING
+  INFO
+}
+
+enum WcagLevel {
+  A
+  AA
+  AAA
+}
+
+enum ReportFormat {
+  PDF
+  HTML
+  JSON
+  CSV
+}
